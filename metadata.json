@@ -1,0 +1,6 @@
+{
+  "name": "ShareLoop",
+  "description": "Local reuse matching platform to keep useful things in circulation in neighborhood circles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
