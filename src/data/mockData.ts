@@ -318,16 +318,6 @@ export const MORE_ITEMS: ItemListing[] = [
   }
 ];
 
-export const CATEGORY_COUNTS: Record<string, number> = {
-  'All Categories': 142,
-  'Books & Media': 28,
-  'Electronics': 19,
-  'Furniture': 34,
-  'Clothing & Shoes': 22,
-  'Kitchen & Dining': 25,
-  'Tools & Hardware': 14
-};
-
 export const NEIGHBORHOOD_OPTIONS = [
   { id: 'all', label: 'All Seattle Neighborhoods' },
   { id: 'capitol-hill', label: 'Capitol Hill & Central' },

@@ -134,7 +134,7 @@ export const MyClaimsView: React.FC<MyClaimsViewProps> = ({
                         <span className="text-[#52525b]">•</span>
                         <span className="text-[#a1a1aa]">{item.handoverProtocol}</span>
                         <span className="text-[#52525b]">•</span>
-                        <span className="text-[#fafafa] font-medium">{item.distance} mi away</span>
+                        <span className="text-[#fafafa] font-medium">{item.distance === undefined ? 'Distance unavailable' : `${item.distance} mi away`}</span>
                       </div>
                       <h3 className="text-[17px] font-semibold text-[#fafafa] truncate">
                         {item.title}
@@ -145,13 +145,14 @@ export const MyClaimsView: React.FC<MyClaimsViewProps> = ({
 
                       {/* Pickup pass pill */}
                       <div className="mt-3 flex flex-wrap items-center gap-3">
+                        {item.claimStatus && <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.claimStatus === 'accepted' ? 'bg-[#34d399]/10 text-[#34d399]' : 'bg-[#a78bfa]/10 text-[#c4b5fd]'}`}>Claim {item.claimStatus}</span>}
                         <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#18181b] rounded-lg border border-[#a78bfa]/30 text-[12px] font-mono text-[#ede9fe]">
                           <span className="material-symbols-outlined text-sm text-[#a78bfa]">vpn_key</span>
-                          <span>{item.pickupPassCode || `PIN-PASS #7425`}</span>
+                          <span>{item.pickupPassCode || 'Pass unavailable'}</span>
                         </div>
                         <div className="text-[12px] text-[#a1a1aa] flex items-center gap-1">
                           <span className="material-symbols-outlined text-sm text-[#a78bfa]">schedule</span>
-                          <span>Window: {item.pickupWindow || 'Today (4:00 PM – 6:30 PM)'}</span>
+                          <span>Window: {item.pickupWindow || 'Not scheduled'}</span>
                         </div>
                       </div>
                     </div>
@@ -187,11 +188,12 @@ export const MyClaimsView: React.FC<MyClaimsViewProps> = ({
                         </button>
                         <button
                           type="button"
+                          disabled={item.claimStatus !== 'accepted'}
                           onClick={() => onConfirmReceived(item.id)}
-                          className="flex-1 sm:flex-initial px-5 py-2.5 bg-[#34d399] hover:bg-[#6ee7b7] text-[#09090b] text-[13px] font-bold rounded-xl shadow-[0_0_15px_rgba(52,211,153,0.3)] transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                          className="flex-1 sm:flex-initial px-5 py-2.5 bg-[#34d399] hover:bg-[#6ee7b7] disabled:opacity-40 disabled:cursor-not-allowed text-[#09090b] text-[13px] font-bold rounded-xl shadow-[0_0_15px_rgba(52,211,153,0.3)] transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                         >
                           <span className="material-symbols-outlined text-base font-bold">check_circle</span>
-                          <span>Confirm Received Physically</span>
+                          <span>{item.claimStatus === 'accepted' ? 'Confirm Received Physically' : 'Awaiting Owner Acceptance'}</span>
                         </button>
                       </div>
                     ) : (
@@ -208,9 +210,7 @@ export const MyClaimsView: React.FC<MyClaimsViewProps> = ({
                   <div className="flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-sm text-[#a78bfa]">deck</span>
                     <span>
-                      {item.handoverProtocol === 'Porch Pickup'
-                        ? `Porch Location: Front steps under cedar awning, ${item.neighborhood}. Entry code: #4821`
-                        : `Meetup Location: Designated community hub in ${item.neighborhood}`}
+                      {item.pickupInstructions || `Pickup details will be provided by the owner for ${item.handoverProtocol} in ${item.neighborhood}.`}
                     </span>
                   </div>
                   {isReceived ? (

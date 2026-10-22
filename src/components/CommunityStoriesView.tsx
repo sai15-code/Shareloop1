@@ -57,7 +57,7 @@ export const CommunityStoriesView: React.FC<CommunityStoriesViewProps> = ({ onBa
           className="inline-flex items-center gap-1.5 bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-semibold px-4 py-2 rounded-full transition-all cursor-pointer"
         >
           <span className="material-symbols-outlined text-base font-bold">add</span>
-          <span>Share a Story / Item</span>
+          <span>Post an Item</span>
         </button>
       </div>
 

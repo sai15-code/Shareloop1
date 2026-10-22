@@ -1,22 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 interface FooterProps {
   onSelectHub?: (hub: string) => void;
   onOpenGuidelines?: () => void;
+  availableItemsCount: number;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onSelectHub, onOpenGuidelines }) => {
-  const [email, setEmail] = useState('');
-  const [subscribed, setSubscribed] = useState(false);
-
-  const handleSubscribe = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !email.includes('@')) return;
-    setSubscribed(true);
-    setTimeout(() => {
-      setEmail('');
-    }, 2500);
-  };
+export const Footer: React.FC<FooterProps> = ({ onSelectHub, onOpenGuidelines, availableItemsCount }) => {
 
   return (
     <footer className="w-full bg-[#0c0c0f] border-t border-[#27272a]/80 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
@@ -34,8 +24,8 @@ export const Footer: React.FC<FooterProps> = ({ onSelectHub, onOpenGuidelines })
             <div className="mt-2 inline-flex items-center gap-2 bg-[#121215] px-4 py-2 rounded-xl border border-[#27272a]/60">
               <span className="material-symbols-outlined text-[#a78bfa]">recycling</span>
               <div className="flex flex-col">
-                <span className="text-[17px] text-[#fafafa] font-semibold leading-tight">4,820</span>
-                <span className="text-[11px] text-[#a1a1aa]">Items saved from landfills</span>
+                <span className="text-[17px] text-[#fafafa] font-semibold leading-tight">{availableItemsCount}</span>
+                <span className="text-[11px] text-[#a1a1aa]">Available items now</span>
               </div>
             </div>
           </div>
@@ -56,10 +46,10 @@ export const Footer: React.FC<FooterProps> = ({ onSelectHub, onOpenGuidelines })
               <li>
                 <button
                   type="button"
-                  onClick={() => onSelectHub && onSelectHub('ballard')}
+                  onClick={() => onSelectHub && onSelectHub('fremont')}
                   className="hover:text-[#a78bfa] transition-colors text-left cursor-pointer"
                 >
-                  Ballard &amp; Fremont Commons
+                  Fremont Commons
                 </button>
               </li>
               <li>
@@ -68,16 +58,16 @@ export const Footer: React.FC<FooterProps> = ({ onSelectHub, onOpenGuidelines })
                   onClick={() => onSelectHub && onSelectHub('beacon-hill')}
                   className="hover:text-[#a78bfa] transition-colors text-left cursor-pointer"
                 >
-                  West Seattle Community Circle
+                  Beacon Hill &amp; South
                 </button>
               </li>
               <li>
                 <button
                   type="button"
-                  onClick={() => onSelectHub && onSelectHub('all')}
+                  onClick={() => onSelectHub && onSelectHub('queen-anne')}
                   className="hover:text-[#a78bfa] transition-colors text-left cursor-pointer"
                 >
-                  Columbia City Exchange
+                  Queen Anne Uplands
                 </button>
               </li>
             </ul>
@@ -132,28 +122,7 @@ export const Footer: React.FC<FooterProps> = ({ onSelectHub, onOpenGuidelines })
             <p className="text-[13px] text-[#a1a1aa] leading-relaxed">
               Weekly roundup of available items and circular initiatives in your immediate zip code.
             </p>
-            <form onSubmit={handleSubscribe} className="flex items-center gap-1.5 mt-1">
-              <input
-                className="h-11 flex-1 rounded-xl bg-[#121215] px-4 text-[#fafafa] placeholder:text-[#a1a1aa]/50 outline-none border border-[#27272a] focus:border-[#a78bfa] focus:ring-1 focus:ring-[#a78bfa]/40 transition-all text-[13px]"
-                placeholder="Enter your email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <button
-                className="h-11 px-4 bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] font-semibold rounded-xl text-[13px] transition-colors shrink-0 shadow-[0_0_12px_rgba(167,139,250,0.2)] cursor-pointer"
-                type="submit"
-              >
-                Join
-              </button>
-            </form>
-            {subscribed && (
-              <p className="text-[11px] text-[#34d399] flex items-center gap-1 mt-1">
-                <span className="material-symbols-outlined text-xs">check</span>
-                Subscribed to weekly neighborhood digest!
-              </p>
-            )}
+            <p className="text-[12px] text-[#a1a1aa]">Email digest signup is not connected yet.</p>
           </div>
         </div>
 

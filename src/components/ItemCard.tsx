@@ -83,7 +83,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onDetailsClick, onClai
           <div className="absolute bottom-3 left-3">
             <span className="px-2.5 py-0.5 bg-[#09090b]/85 backdrop-blur-md text-[#a1a1aa] border border-[#27272a] text-[11px] font-medium rounded-full flex items-center gap-1 shadow-sm">
               <span className="material-symbols-outlined text-xs text-[#a78bfa]">near_me</span>
-              {item.distance} mi • {item.neighborhood}
+              {item.distance === undefined ? 'Distance unavailable' : `${item.distance} mi`} • {item.neighborhood}
             </span>
           </div>
         </div>

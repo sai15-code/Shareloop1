@@ -26,13 +26,16 @@ export interface Donor {
 
 export interface ItemListing {
   id: string;
+  claimId?: string;
+  claimStatus?: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed';
+  pickupInstructions?: string;
   title: string;
   category: CategoryType;
   subCategory: string;
   condition: ConditionType;
   conditionDescription: string;
   handoverProtocol: HandoverType;
-  distance: number;
+  distance?: number;
   neighborhood: string;
   timeAgo: string;
   description: string;

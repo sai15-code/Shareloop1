@@ -1,5 +1,6 @@
 node_modules/
 dist/
+shareloop-backup/
 .env
 .env.*
 !.env.example

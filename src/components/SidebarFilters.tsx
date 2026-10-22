@@ -1,6 +1,5 @@
 import React from 'react';
-import { CategoryType, ConditionType, HandoverType } from '../types';
-import { CATEGORY_COUNTS } from '../data/mockData';
+import { CategoryType, ConditionType, HandoverType, ItemListing } from '../types';
 
 interface SidebarFiltersProps {
   selectedCategory: CategoryType;
@@ -13,6 +12,7 @@ interface SidebarFiltersProps {
   setAvailability: (avail: 'all' | 'available' | 'pending') => void;
   onResetFilters: () => void;
   radius: number;
+  items: ItemListing[];
 }
 
 const CONDITIONS: { label: ConditionType; desc: string }[] = [
@@ -48,7 +48,8 @@ export const SidebarFilters: React.FC<SidebarFiltersProps> = ({
   availability,
   setAvailability,
   onResetFilters,
-  radius
+  radius,
+  items
 }) => {
   return (
     <aside className="w-full space-y-4">
@@ -59,12 +60,12 @@ export const SidebarFilters: React.FC<SidebarFiltersProps> = ({
             <span className="material-symbols-outlined text-[#a78bfa] text-lg">category</span>
             <h2 className="text-[17px] font-semibold text-[#fafafa]">Categories</h2>
           </div>
-          <span className="text-[11px] font-medium text-[#a1a1aa]">142 items</span>
+          <span className="text-[11px] font-medium text-[#a1a1aa]">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
         </div>
         <ul className="space-y-1">
           {CATEGORIES.map((cat) => {
             const isSelected = selectedCategory === cat;
-            const count = CATEGORY_COUNTS[cat] || 0;
+            const count = cat === 'All Categories' ? items.length : items.filter((item) => item.category === cat).length;
             return (
               <li key={cat}>
                 <button

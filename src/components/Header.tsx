@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { USER_PROFILE, NOTIFICATIONS_SAMPLE, MESSAGES_SAMPLE } from '../data/mockData';
+import { USER_PROFILE } from '../data/mockData';
 
 interface HeaderProps {
-  currentTab: 'explore' | 'my-claims' | 'how-it-works' | 'community-stories';
-  setCurrentTab: (tab: 'explore' | 'my-claims' | 'how-it-works' | 'community-stories') => void;
+  currentTab: 'explore' | 'my-claims' | 'my-listings' | 'how-it-works' | 'community-stories';
+  setCurrentTab: (tab: 'explore' | 'my-claims' | 'my-listings' | 'how-it-works' | 'community-stories') => void;
   onPostItemClick: () => void;
   onChangeLocationClick: () => void;
   currentNeighborhood: string;
   radius: number;
   claimsCount?: number;
+  authenticated?: boolean;
+  onAuthClick?: () => void;
+  currentUser?: { name: string; email: string } | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,15 +21,20 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeLocationClick,
   currentNeighborhood,
   radius,
-  claimsCount = 0
+  claimsCount = 0,
+  authenticated = false,
+  onAuthClick,
+  currentUser
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [notifications, setNotifications] = useState(NOTIFICATIONS_SAMPLE);
+  const notifications: { id: string; unread: boolean; title: string; time: string; message: string }[] = [];
 
   const unreadCount = notifications.filter((n) => n.unread).length;
+  const displayName = currentUser?.name || USER_PROFILE.name;
+  const displayRole = currentUser?.email || USER_PROFILE.role;
 
   return (
     <header className="fixed top-0 left-0 w-full z-50 bg-[#09090b]/85 backdrop-blur-xl border-b border-[#27272a]/60 shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
@@ -89,6 +97,11 @@ export const Header: React.FC<HeaderProps> = ({
             How It Works
           </button>
 
+          {authenticated && <button
+            onClick={() => setCurrentTab('my-listings')}
+            className={`transition-colors text-[14px] font-semibold pb-0.5 cursor-pointer ${currentTab === 'my-listings' ? 'text-[#a78bfa] border-b-2 border-[#a78bfa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'}`}
+          >My Listings</button>}
+
           <button
             onClick={() => setCurrentTab('community-stories')}
             className={`transition-colors text-[14px] font-semibold pb-0.5 cursor-pointer ${
@@ -117,6 +130,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Cluster */}
         <div className="flex items-center gap-4 shrink-0">
+          <button onClick={onAuthClick} className="text-[12px] font-semibold text-[#c4b5fd] hover:text-white" type="button">{authenticated ? 'Sign out' : 'Sign in'}</button>
           <button
             onClick={onPostItemClick}
             className="inline-flex items-center gap-1.5 bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-semibold px-5 py-2 rounded-full transition-all shadow-[0_0_15px_rgba(167,139,250,0.25)] active:scale-95 cursor-pointer"
@@ -150,14 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="absolute right-0 mt-3 w-80 bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-4 z-50">
                   <div className="flex items-center justify-between pb-3 border-b border-[#27272a] mb-3">
                     <span className="text-[14px] font-semibold text-[#fafafa]">Notifications</span>
-                    <button
-                      onClick={() =>
-                        setNotifications(notifications.map((n) => ({ ...n, unread: false })))
-                      }
-                      className="text-[11px] text-[#a78bfa] hover:underline"
-                    >
-                      Mark all read
-                    </button>
+                    <span className="text-[11px] text-[#a1a1aa]">Live notifications are not configured.</span>
                   </div>
                   <div className="space-y-3 max-h-72 overflow-y-auto">
                     {notifications.map((n) => (
@@ -176,6 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <p className="text-[11px] text-[#a1a1aa] leading-relaxed">{n.message}</p>
                       </div>
                     ))}
+                    {notifications.length === 0 && <p className="py-4 text-center text-xs text-[#a1a1aa]">No notifications yet.</p>}
                   </div>
                 </div>
               )}
@@ -200,12 +208,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="absolute right-0 mt-3 w-80 bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-4 z-50">
                   <div className="flex items-center justify-between pb-3 border-b border-[#27272a] mb-3">
                     <span className="text-[14px] font-semibold text-[#fafafa]">Direct Messages</span>
-                    <span className="text-[11px] text-[#34d399] flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#34d399]"></span> 2 Active
-                    </span>
+                    <span className="text-[11px] text-[#a1a1aa]">Not connected</span>
                   </div>
                   <div className="space-y-2.5 max-h-72 overflow-y-auto">
-                    {MESSAGES_SAMPLE.map((m) => (
+                    {([] as { id: string; avatar: string; neighborName: string; time: string; itemTitle: string; lastMessage: string }[]).map((m) => (
                       <div
                         key={m.id}
                         className="p-2.5 rounded-xl bg-[#18181b] border border-[#27272a] hover:border-[#a78bfa]/40 transition-colors cursor-pointer text-left"
@@ -227,6 +233,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <p className="text-[11px] text-[#a1a1aa] truncate">{m.lastMessage}</p>
                       </div>
                     ))}
+                    <p className="py-4 text-center text-xs text-[#a1a1aa]">Direct messaging is not connected yet.</p>
                   </div>
                 </div>
               )}
@@ -250,9 +257,9 @@ export const Header: React.FC<HeaderProps> = ({
               />
               <div className="hidden 2xl:flex flex-col text-left">
                 <span className="text-[12px] text-[#fafafa] font-semibold leading-tight">
-                  {USER_PROFILE.name}
+                  {displayName}
                 </span>
-                <span className="text-[11px] text-[#a78bfa] leading-none">{USER_PROFILE.role}</span>
+                <span className="text-[11px] text-[#a78bfa] leading-none">{displayRole}</span>
               </div>
               <span className="material-symbols-outlined text-[#a1a1aa] text-base group-hover:text-[#fafafa]">
                 arrow_drop_down
@@ -264,12 +271,12 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center gap-3 pb-3 border-b border-[#27272a] mb-3">
                   <img
                     src={USER_PROFILE.avatar}
-                    alt={USER_PROFILE.name}
+                    alt={displayName}
                     className="w-10 h-10 rounded-full object-cover ring-1 ring-[#a78bfa]"
                   />
                   <div>
-                    <h4 className="text-[13px] font-semibold text-[#fafafa]">{USER_PROFILE.name}</h4>
-                    <p className="text-[11px] text-[#a78bfa]">{USER_PROFILE.role}</p>
+                    <h4 className="text-[13px] font-semibold text-[#fafafa]">{displayName}</h4>
+                    <p className="text-[11px] text-[#a78bfa]">{displayRole}</p>
                   </div>
                 </div>
                 <div className="space-y-2 text-[12px]">
@@ -289,6 +296,12 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="px-2 py-0.5 rounded-full bg-[#7c3aed] text-white text-[11px]">
                       {claimsCount}
                     </span>
+                  </button>
+                  <button
+                    onClick={() => { setCurrentTab('my-listings'); setShowProfileMenu(false); }}
+                    className="w-full flex items-center justify-between p-2 rounded-xl bg-[#18181b] hover:bg-[#27272a] text-[#fafafa] font-semibold transition-colors cursor-pointer"
+                  >
+                    <span>My Listings &amp; Requests</span>
                   </button>
 
                   <div className="flex justify-between py-1 text-[#a1a1aa] px-1">
@@ -351,6 +364,11 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>Explore Listings</span>
               </span>
             </button>
+
+            {authenticated && <button
+              onClick={() => { setCurrentTab('my-listings'); setShowMobileMenu(false); }}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-[14px] font-semibold ${currentTab === 'my-listings' ? 'bg-[#18181b] text-[#a78bfa] border border-[#a78bfa]/30' : 'text-[#a1a1aa] hover:bg-[#18181b] hover:text-[#fafafa]'}`}
+            >My Listings</button>}
 
             <button
               onClick={() => {

@@ -99,8 +99,8 @@ export const MapViewModal: React.FC<MapViewModalProps> = ({
           ></div>
 
           {/* Interactive Pins */}
-          {items.map((item, index) => {
-            const coords = item.mapCoords || { x: 30 + (index * 8) % 50, y: 25 + (index * 11) % 55 };
+          {items.map((item) => {
+            const coords = item.mapCoords!;
             const isSelected = selectedPin?.id === item.id;
             return (
               <div
@@ -142,7 +142,7 @@ export const MapViewModal: React.FC<MapViewModalProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between text-[11px] text-[#a78bfa] font-semibold mb-0.5">
                     <span>{selectedPin.neighborhood}</span>
-                    <span>{selectedPin.distance} mi</span>
+                    <span>{selectedPin.distance === undefined ? 'Distance unavailable' : `${selectedPin.distance} mi`}</span>
                   </div>
                   <h4 className="text-[13px] font-semibold text-[#fafafa] truncate">
                     {selectedPin.title}

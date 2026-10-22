@@ -5,7 +5,7 @@ interface ItemDetailsModalProps {
   item: ItemListing | null;
   onClose: () => void;
   onClaim: (item: ItemListing) => void;
-  onSendMessage: (item: ItemListing, message: string) => void;
+  onSendMessage: (item: ItemListing, message: string) => boolean;
 }
 
 export const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({
@@ -22,12 +22,10 @@ export const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickMessage.trim()) return;
-    onSendMessage(item, quickMessage);
-    setMessageSent(true);
-    setTimeout(() => {
-      setMessageSent(false);
-      setQuickMessage('');
-    }, 3000);
+    if (onSendMessage(item, quickMessage)) {
+      setMessageSent(true);
+      setTimeout(() => { setMessageSent(false); setQuickMessage(''); }, 3000);
+    }
   };
 
   return (
@@ -76,7 +74,7 @@ export const ItemDetailsModal: React.FC<ItemDetailsModalProps> = ({
             <div className="absolute bottom-3 left-3">
               <span className="px-3 py-1 bg-[#09090b]/85 backdrop-blur-md text-[#a1a1aa] border border-[#27272a] text-[12px] font-medium rounded-full flex items-center gap-1.5 shadow-sm">
                 <span className="material-symbols-outlined text-sm text-[#a78bfa]">near_me</span>
-                {item.distance} miles away • {item.neighborhood}
+                {item.distance === undefined ? 'Distance unavailable' : `${item.distance} miles away`} • {item.neighborhood}
               </span>
             </div>
           </div>

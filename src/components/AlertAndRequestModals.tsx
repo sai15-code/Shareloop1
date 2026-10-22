@@ -4,24 +4,28 @@ interface CreateAlertModalProps {
   isOpen: boolean;
   onClose: () => void;
   radius: number;
-  onSuccess: (term: string) => void;
+  neighborhood: string;
+  onSuccess: (term: string, notifyByEmail: boolean) => Promise<void>;
 }
 
-export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onClose, radius, onSuccess }) => {
+export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onClose, radius, neighborhood, onSuccess }) => {
   const [searchTerm, setSearchTerm] = useState('Solid Wood Desk');
   const [notifyByEmail, setNotifyByEmail] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
-      onSuccess(searchTerm);
-      onClose();
-      setSubmitted(false);
-    }, 1000);
+    setError(''); setSaving(true);
+    try {
+      await onSuccess(searchTerm, notifyByEmail);
+      setSubmitted(true);
+      setTimeout(() => { onClose(); setSubmitted(false); }, 1600);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save alert'); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -42,6 +46,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onCl
 
         {!submitted ? (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
             <div>
               <label className="block text-[12px] font-semibold text-[#a1a1aa] mb-1">
                 Notify me when someone posts:
@@ -56,7 +61,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onCl
             </div>
 
             <div className="p-3 bg-[#18181b] rounded-xl border border-[#27272a] text-[12px] text-[#a1a1aa]">
-              Radius: <strong className="text-[#fafafa] font-semibold">{radius} miles</strong> around Seattle Central.
+              Radius: <strong className="text-[#fafafa] font-semibold">{radius} miles</strong> around {neighborhood}.
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer">
@@ -66,7 +71,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onCl
                 onChange={(e) => setNotifyByEmail(e.target.checked)}
                 className="w-4 h-4 rounded bg-[#1e1e22] accent-[#a78bfa]"
               />
-              <span className="text-[12px] text-[#fafafa]">Send push notification & instant email</span>
+              <span className="text-[12px] text-[#fafafa]">Email me when notifications are available (delivery is not configured yet)</span>
             </label>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -81,13 +86,13 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onCl
                 type="submit"
                 className="px-5 py-2 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-semibold transition-all cursor-pointer"
               >
-                Create Alert
+                {saving ? 'Saving…' : 'Save Alert'}
               </button>
             </div>
           </form>
         ) : (
           <div className="py-6 text-center text-[#34d399] font-medium text-[14px]">
-            Alert activated for "{searchTerm}"!
+            Alert saved for "{searchTerm}". Notification delivery is not configured yet.
           </div>
         )}
       </div>
@@ -98,25 +103,25 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, onCl
 interface PostRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (req: string) => void;
+  onSuccess: (req: string, category: string) => Promise<void>;
 }
 
 export const PostRequestModal: React.FC<PostRequestModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [requestText, setRequestText] = useState('');
   const [category, setCategory] = useState('Furniture');
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!requestText.trim()) return;
-    setSubmitted(true);
-    setTimeout(() => {
-      onSuccess(requestText);
-      onClose();
-      setSubmitted(false);
-    }, 1000);
+    setError(''); setSaving(true);
+    try { await onSuccess(requestText, category); setSubmitted(true); setTimeout(() => { onClose(); setSubmitted(false); }, 1600); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save request'); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -137,6 +142,7 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({ isOpen, onCl
 
         {!submitted ? (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
             <div>
               <label className="block text-[12px] font-semibold text-[#a1a1aa] mb-1">
                 Category
@@ -170,7 +176,7 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({ isOpen, onCl
             </div>
 
             <p className="text-[11px] text-[#a1a1aa] leading-relaxed">
-              Neighbors within 5 miles will receive a quiet circular prompt to check their storage or garage before discarding.
+              This request will be saved to your account. Automatic neighbor notifications are not configured yet.
             </p>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -185,13 +191,13 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({ isOpen, onCl
                 type="submit"
                 className="px-5 py-2 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-semibold transition-all cursor-pointer"
               >
-                Broadcast Request
+                {saving ? 'Saving…' : 'Save Request'}
               </button>
             </div>
           </form>
         ) : (
           <div className="py-6 text-center text-[#34d399] font-medium text-[14px]">
-            Broadcast sent to verified neighbors!
+            Request saved. Neighbors are not notified automatically yet.
           </div>
         )}
       </div>

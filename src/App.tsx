@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Header } from './components/Header';
 import { SearchControlPanel } from './components/SearchControlPanel';
 import { SidebarFilters } from './components/SidebarFilters';
@@ -15,18 +15,66 @@ import { MapViewModal } from './components/MapViewModal';
 import { HowItWorksView } from './components/HowItWorksView';
 import { CommunityStoriesView } from './components/CommunityStoriesView';
 import { MyClaimsView } from './components/MyClaimsView';
+import { MyListingsView, OwnerClaim } from './components/MyListingsView';
 import { CreateAlertModal, PostRequestModal } from './components/AlertAndRequestModals';
 import { Footer } from './components/Footer';
-import { INITIAL_ITEMS, MORE_ITEMS, NEIGHBORHOOD_OPTIONS, USER_PROFILE } from './data/mockData';
+import { NEIGHBORHOOD_OPTIONS, USER_PROFILE } from './data/mockData';
 import { ItemListing, CategoryType, ConditionType, HandoverType } from './types';
+import { api, ApiError, getToken, saveToken } from './api';
+
+const fromListing = (raw: any): ItemListing => {
+  const donor = raw.donor || {};
+  const coords = raw.mapCoords;
+  const hasMapCoords = Number.isFinite(coords?.x) && Number.isFinite(coords?.y)
+    && coords.x >= 0 && coords.x <= 100 && coords.y >= 0 && coords.y <= 100;
+  return {
+    id: raw._id,
+    title: raw.title,
+    description: raw.description,
+    category: raw.category,
+    subCategory: raw.subCategory || raw.category,
+    condition: raw.condition,
+    conditionDescription: raw.conditionDescription || raw.condition,
+    handoverProtocol: raw.pickupDetails?.handoverType || 'Porch Pickup',
+    ...(raw.pickupDetails?.instructions ? { pickupInstructions: raw.pickupDetails.instructions } : {}),
+    ...(Number.isFinite(raw.distance) && raw.distance >= 0 ? { distance: raw.distance } : {}),
+    neighborhood: raw.locality,
+    timeAgo: raw.timeAgo || (raw.createdAt ? new Date(raw.createdAt).toLocaleDateString() : 'Recently'),
+    image: raw.images?.[0] || '',
+    altText: raw.altText || raw.title,
+    donor: {
+      name: donor.name || raw.owner?.name || 'ShareLoop member',
+      avatar: donor.avatar || USER_PROFILE.avatar,
+      rehomedCount: Number.isFinite(donor.rehomedCount) ? donor.rehomedCount : 0,
+      badge: ['verified', 'verified_user', 'eco'].includes(donor.badge) ? donor.badge : 'verified',
+      ...(donor.responseRate ? { responseRate: donor.responseRate } : {}),
+      ...(donor.joinedYear ? { joinedYear: donor.joinedYear } : {}),
+    },
+    ...(raw.dimensions ? { dimensions: raw.dimensions } : {}),
+    ...(raw.weightEst ? { weightEst: raw.weightEst } : {}),
+    claimed: raw.status !== 'available',
+    ...(hasMapCoords ? { mapCoords: { x: coords.x, y: coords.y } } : {}),
+    ...(raw.claimId ? { claimId: raw.claimId, claimStatus: raw.claimStatus, pickupPassCode: raw.passCode, pickupWindow: raw.pickupWindow ? `${new Date(raw.pickupWindow.start).toLocaleString()} – ${new Date(raw.pickupWindow.end).toLocaleString()}` : '', claimedNote: raw.note, physicalStatus: raw.claimStatus === 'completed' ? 'received' as const : 'awaiting_pickup' as const } : {}),
+  };
+};
 
 export default function App() {
   // Navigation Tab
-  const [currentTab, setCurrentTab] = useState<'explore' | 'my-claims' | 'how-it-works' | 'community-stories'>('explore');
+  const [currentTab, setCurrentTab] = useState<'explore' | 'my-claims' | 'my-listings' | 'how-it-works' | 'community-stories'>('explore');
 
   // Items State (all items available for circulation)
-  const [items, setItems] = useState<ItemListing[]>([...INITIAL_ITEMS, ...MORE_ITEMS]);
-  const [hasLoadedMore, setHasLoadedMore] = useState(true);
+  const [items, setItems] = useState<ItemListing[]>([]);
+  const [claims, setClaims] = useState<ItemListing[]>([]);
+  const [myListings, setMyListings] = useState<ItemListing[]>([]);
+  const [receivedClaims, setReceivedClaims] = useState<OwnerClaim[]>([]);
+  const [token, setToken] = useState<string | null>(() => getToken());
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authError, setAuthError] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,6 +107,63 @@ export default function App() {
     setTimeout(() => {
       setToastMessage(null);
     }, 3500);
+  };
+
+  const refreshListings = async () => {
+    const firstPage: any = await api('/listings?page=1&limit=100');
+    const listings = Array.isArray(firstPage?.data?.listings) ? firstPage.data.listings : null;
+    if (!listings) throw new Error('The listings API returned an unexpected response.');
+    const totalPages = Number(firstPage.data.pagination?.totalPages) || 1;
+    const remainingPages = await Promise.all(Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) =>
+      api<any>(`/listings?page=${index + 2}&limit=100`)
+    ));
+    const allListings = [
+      ...listings,
+      ...remainingPages.flatMap((result) => Array.isArray(result?.data?.listings) ? result.data.listings : []),
+    ];
+    setItems(allListings.map(fromListing));
+  };
+  const refreshClaims = async () => {
+    if (!getToken()) { setClaims([]); setMyListings([]); setReceivedClaims([]); return; }
+    const result: any = await api('/claims/mine');
+    setClaims(result.data.claims.filter((c: any) => ['pending', 'accepted', 'completed'].includes(c.status)).map((c: any) => fromListing({ ...c.listing, status: c.status === 'completed' ? 'completed' : 'claimed', claimId: c._id, claimStatus: c.status, passCode: c.passCode, pickupWindow: c.pickupWindow, note: c.note })));
+    const [owned, received]: any[] = await Promise.all([api('/listings/mine'), api('/claims/received')]);
+    setMyListings(owned.data.listings.map(fromListing));
+    setReceivedClaims(received.data.claims.map((claim: any) => ({ id: claim._id, status: claim.status, claimantName: claim.claimant?.name || 'ShareLoop member', pickupWindow: claim.pickupWindow, note: claim.note, listingId: claim.listing?._id, listingTitle: claim.listing?.title || 'Listing' })));
+  };
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError(null);
+    (async () => {
+      if (getToken()) {
+        try { const result: any = await api('/auth/me'); if (active) setCurrentUser(result.data.user); }
+        catch (error) {
+          if (error instanceof ApiError && [401, 403].includes(error.status)) { saveToken(null); setToken(null); setCurrentUser(null); setClaims([]); }
+          else if (active) showToast(error instanceof Error ? error.message : 'Could not verify your session');
+        }
+      } else if (active) setCurrentUser(null);
+      const results = await Promise.allSettled([refreshListings(), refreshClaims()]);
+      if (active) {
+        if (results[0].status === 'rejected') setLoadError(results[0].reason instanceof Error ? results[0].reason.message : 'Unable to load listings');
+        if (results[1].status === 'rejected' && getToken()) showToast(results[1].reason instanceof Error ? results[1].reason.message : 'Unable to load claims');
+        setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [token]);
+
+  const handleAuth = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setAuthError('');
+    if (authSubmitting) return;
+    setAuthSubmitting(true);
+    const form = new FormData(event.currentTarget);
+    try {
+      if (authMode === 'register') await api('/auth/register', { method: 'POST', body: JSON.stringify({ name: form.get('name'), email: form.get('email'), password: form.get('password') }) });
+      const result: any = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email: form.get('email'), password: form.get('password') }) });
+      saveToken(result.data.token); setToken(result.data.token); setCurrentUser(result.data.user); setAuthOpen(false); showToast(`Welcome, ${result.data.user.name}`);
+    } catch (error) { setAuthError(error instanceof Error ? error.message : 'Unable to sign in'); }
+    finally { setAuthSubmitting(false); }
   };
 
   // Toggle helpers
@@ -133,17 +238,17 @@ export default function App() {
     // 5. Neighborhood filter
     if (neighborhood !== 'all') {
       const hoodOption = NEIGHBORHOOD_OPTIONS.find((n) => n.id === neighborhood);
-      const hoodTerm = hoodOption ? hoodOption.label.split(' ')[0].toLowerCase() : '';
-      if (hoodTerm) {
-        result = result.filter(
-          (it) => it.neighborhood.toLowerCase().includes(hoodTerm) || it.distance <= radius
-        );
+      const hoodTerms = hoodOption
+        ? [hoodOption.id.replace(/-/g, ' '), ...hoodOption.label.toLowerCase().split(/\s*&\s*/).map((term) => term.trim())]
+        : [];
+      if (hoodTerms.length) {
+        result = result.filter((it) => hoodTerms.some((term) => it.neighborhood.toLowerCase().includes(term)));
       }
     }
 
     // 6. Radius filter
     if (radius < 25) {
-      result = result.filter((it) => it.distance <= radius);
+      result = result.filter((it) => it.distance === undefined || it.distance <= radius);
     }
 
     // 7. Availability filter
@@ -155,7 +260,7 @@ export default function App() {
 
     // 8. Sorting
     if (sortBy === 'nearest') {
-      result.sort((a, b) => a.distance - b.distance);
+      result.sort((a, b) => (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY));
     } else if (sortBy === 'condition') {
       result.sort((a, b) => (a.condition.includes('New') ? -1 : 1));
     } else if (sortBy === 'reputable') {
@@ -175,77 +280,75 @@ export default function App() {
     sortBy
   ]);
 
+  const mapItems = useMemo(
+    () => filteredItems.filter((item) => item.mapCoords
+      && Number.isFinite(item.mapCoords.x) && Number.isFinite(item.mapCoords.y)
+      && item.mapCoords.x >= 0 && item.mapCoords.x <= 100
+      && item.mapCoords.y >= 0 && item.mapCoords.y <= 100),
+    [filteredItems],
+  );
+
   // Claims
   const claimedItems = useMemo(() => {
-    return items.filter((it) => it.claimed);
-  }, [items]);
+    return claims;
+  }, [claims]);
 
-  const handleConfirmClaim = (
+  const handleConfirmClaim = async (
     item: ItemListing,
     pickupWindow: string,
     note: string,
-    passCode: string
-  ) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === item.id
-          ? {
-              ...it,
-              claimed: true,
-              claimedBy: USER_PROFILE.name,
-              pickupWindow,
-              claimedNote: note,
-              pickupPassCode: passCode,
-              physicalStatus: 'awaiting_pickup'
-            }
-          : it
-      )
-    );
-    showToast(`Claim confirmed! Pickup pass stored for "${item.title}".`);
+    _passCode: string
+  ): Promise<string> => {
+    const start = new Date();
+    const end = new Date();
+    if (pickupWindow.startsWith('Tomorrow Morning')) { start.setDate(start.getDate() + 1); start.setHours(9, 0, 0, 0); end.setTime(start.getTime()); end.setHours(11, 30, 0, 0); }
+    else if (pickupWindow.startsWith('Tomorrow Evening')) { start.setDate(start.getDate() + 1); start.setHours(17, 0, 0, 0); end.setTime(start.getTime()); end.setHours(19, 30, 0, 0); }
+    else if (pickupWindow.startsWith('This Weekend')) { const daysUntilSaturday = (6 - start.getDay() + 7) % 7 || 7; start.setDate(start.getDate() + daysUntilSaturday); start.setHours(10, 0, 0, 0); end.setTime(start.getTime()); end.setHours(16, 0, 0, 0); }
+    else { start.setHours(16, 0, 0, 0); if (start <= new Date()) start.setDate(start.getDate() + 1); end.setTime(start.getTime()); end.setHours(18, 30, 0, 0); }
+    const result: any = await api('/claims', { method: 'POST', body: JSON.stringify({ listingId: item.id, pickupWindow: { start: start.toISOString(), end: end.toISOString() }, note: `${pickupWindow}: ${note}` }) });
+    await Promise.all([refreshListings(), refreshClaims()]);
+    showToast(`Claim confirmed for "${item.title}".`);
+    return result.data.claim.passCode;
   };
 
   const handleConfirmReceived = (itemId: string) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? {
-              ...it,
-              physicalStatus: 'received',
-              receivedAt: new Date().toLocaleTimeString()
-            }
-          : it
-      )
-    );
-    USER_PROFILE.savedCO2Lbs += 35;
-    USER_PROFILE.claimedItems += 1;
-    showToast(`Success! You confirmed physical receipt. +35 lbs CO2e saved!`);
+    const item = claims.find((claim) => claim.id === itemId);
+    if (!item?.claimId) return;
+    api(`/claims/${item.claimId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'completed' }) }).then(() => Promise.all([refreshListings(), refreshClaims()])).then(() => showToast('Pickup marked as received.')).catch((e) => showToast(e.message));
   };
 
   const handleCancelClaim = (itemId: string) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? {
-              ...it,
-              claimed: false,
-              claimedBy: undefined,
-              pickupPassCode: undefined,
-              pickupWindow: undefined,
-              physicalStatus: undefined
-            }
-          : it
-      )
-    );
-    showToast(`Claim cancelled. Item returned to circulation.`);
+    const item = claims.find((claim) => claim.id === itemId);
+    if (!item?.claimId) return;
+    api(`/claims/${item.claimId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) }).then(() => Promise.all([refreshListings(), refreshClaims()])).then(() => showToast('Claim cancelled. Item returned to circulation.')).catch((e) => showToast(e.message));
   };
 
-  const handleAddItem = (newItem: ItemListing) => {
-    setItems((prev) => [newItem, ...prev]);
+  const handleAddItem = async (newItem: ItemListing) => {
+    const image = newItem.image.startsWith('http') ? newItem.image : '';
+    await api('/listings', { method: 'POST', body: JSON.stringify({ title: newItem.title, description: newItem.description, category: newItem.category, condition: newItem.condition, images: image ? [image] : [], locality: newItem.neighborhood, pickupDetails: { handoverType: newItem.handoverProtocol, instructions: newItem.description } }) });
+    await refreshListings();
     showToast(`"${newItem.title}" is now circulating in ${newItem.neighborhood}!`);
   };
 
-  const handleSendMessage = (item: ItemListing, message: string) => {
-    showToast(`Sent private message to ${item.donor.name}: "${message.slice(0, 30)}..."`);
+  const handleUpdateListing = async (id: string, changes: { title: string; description: string }) => {
+    await api(`/listings/${id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+    await Promise.all([refreshListings(), refreshClaims()]);
+    showToast('Listing updated.');
+  };
+  const handleDeleteListing = async (id: string) => {
+    await api(`/listings/${id}`, { method: 'DELETE' });
+    await Promise.all([refreshListings(), refreshClaims()]);
+    showToast('Listing deleted.');
+  };
+  const handleOwnerClaimStatus = async (id: string, status: 'accepted' | 'rejected') => {
+    await api(`/claims/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    await Promise.all([refreshListings(), refreshClaims()]);
+    showToast(status === 'accepted' ? 'Claim accepted.' : 'Claim rejected and item returned to Explore.');
+  };
+
+  const handleSendMessage = (_item: ItemListing, _message: string): boolean => {
+    showToast('Direct messaging is not connected yet. Please coordinate through the pickup details after the owner accepts your claim.');
+    return false;
   };
 
   // Has active filter badges to show
@@ -269,8 +372,8 @@ export default function App() {
       {/* Global Header */}
       <Header
         currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
-        onPostItemClick={() => setIsPostModalOpen(true)}
+        setCurrentTab={(tab) => { if ((tab === 'my-claims' || tab === 'my-listings') && !token) setAuthOpen(true); else setCurrentTab(tab); }}
+        onPostItemClick={() => token ? setIsPostModalOpen(true) : setAuthOpen(true)}
         onChangeLocationClick={() => {
           setNeighborhood(neighborhood === 'all' ? 'capitol-hill' : 'all');
           showToast('Updated neighborhood focus area');
@@ -278,6 +381,9 @@ export default function App() {
         currentNeighborhood={currentNeighborhoodLabel}
         radius={radius}
         claimsCount={claimedItems.length}
+        authenticated={Boolean(token)}
+        currentUser={currentUser}
+        onAuthClick={() => { if (token) { saveToken(null); setToken(null); setCurrentUser(null); showToast('Signed out'); } else setAuthOpen(true); }}
       />
 
       {/* Main Content Area */}
@@ -290,6 +396,8 @@ export default function App() {
             onBackToExplore={() => setCurrentTab('explore')}
             onContactDonor={(it) => setInspectingItem(it)}
           />
+        ) : currentTab === 'my-listings' ? (
+          <MyListingsView listings={myListings} claims={receivedClaims} onUpdate={handleUpdateListing} onDelete={handleDeleteListing} onClaimStatus={handleOwnerClaimStatus} onBack={() => setCurrentTab('explore')} />
         ) : currentTab === 'how-it-works' ? (
           <HowItWorksView
             onBackToExplore={() => setCurrentTab('explore')}
@@ -351,6 +459,7 @@ export default function App() {
                     setAvailability={setAvailability}
                     onResetFilters={handleResetFilters}
                     radius={radius}
+                    items={items}
                   />
                 </div>
 
@@ -379,7 +488,7 @@ export default function App() {
                         className="flex items-center gap-1 px-3 py-1 bg-[#121215] hover:bg-[#18181b] border border-[#27272a] rounded-lg text-[#a78bfa] text-[12px] font-semibold transition-colors cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-sm">map</span>
-                        <span>Pins ({filteredItems.length})</span>
+                        <span>Pins ({mapItems.length})</span>
                       </button>
                     </div>
                   </div>
@@ -474,8 +583,14 @@ export default function App() {
                   )}
 
                   {/* Items Grid */}
+                  {!loading && loadError && (
+                    <div role="alert" className="mb-4 rounded-2xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">
+                      <p>Listings could not be loaded: {loadError}</p>
+                      <button type="button" className="mt-2 underline" onClick={() => { setLoading(true); setLoadError(null); refreshListings().catch((error) => setLoadError(error instanceof Error ? error.message : 'Unable to load listings')).finally(() => setLoading(false)); }}>Try again</button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredItems.map((item) => (
+                    {loading ? <div className="col-span-full py-12 text-center text-[#a1a1aa]">Loading listings…</div> : filteredItems.map((item) => (
                       <ItemCard
                         key={item.id}
                         item={item}
@@ -483,7 +598,9 @@ export default function App() {
                         onClaimClick={(it) => {
                           if (it.claimed) {
                             setCurrentTab('my-claims');
-                          } else {
+                            } else if (!token) {
+                              setAuthOpen(true);
+                            } else {
                             setClaimingItem(it);
                           }
                         }}
@@ -492,23 +609,17 @@ export default function App() {
                   </div>
 
                   {/* Empty search results fallback */}
-                  {filteredItems.length === 0 && (
+                  {filteredItems.length === 0 && !loading && !loadError && (
                     <div className="py-16 text-center bg-[#121215] rounded-3xl border border-[#27272a] p-8 mt-4">
-                      <span className="material-symbols-outlined text-[#a78bfa] text-4xl mb-2">
-                        search_off
-                      </span>
+                      <span className="material-symbols-outlined text-[#a78bfa] text-4xl mb-2">{items.length === 0 ? 'inventory_2' : 'search_off'}</span>
                       <h3 className="text-[18px] font-semibold text-[#fafafa]">
-                        No circular items matched your exact filters
+                        {items.length === 0 ? 'No items posted yet' : 'No circular items matched your exact filters'}
                       </h3>
                       <p className="text-[13px] text-[#a1a1aa] mt-1 mb-4">
-                        Click "Clear All Filters" to view all available furniture, electronics, and goods.
+                        {items.length === 0 ? 'Be the first to share a useful item with your neighbors.' : 'Clear your filters to view all available furniture, electronics, and goods.'}
                       </p>
-                      <button
-                        type="button"
-                        onClick={handleClearAllBadges}
-                        className="px-6 py-2.5 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-bold cursor-pointer transition-all shadow-[0_0_15px_rgba(167,139,250,0.3)]"
-                      >
-                        Clear All Filters &amp; Show Everything
+                      <button type="button" onClick={() => items.length === 0 ? (token ? setIsPostModalOpen(true) : setAuthOpen(true)) : handleClearAllBadges()} className="px-6 py-2.5 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-bold cursor-pointer transition-all shadow-[0_0_15px_rgba(167,139,250,0.3)]">
+                        {items.length === 0 ? 'Post the first item' : 'Clear All Filters & Show Everything'}
                       </button>
                     </div>
                   )}
@@ -532,15 +643,14 @@ export default function App() {
                           Can't find what you're looking for?
                         </h3>
                         <p className="text-[13px] text-[#a1a1aa] max-w-xl leading-relaxed">
-                          Set a neighborhood alert for specific goods, or post a "Looking For" request
-                          to notify neighbors within 5 miles before they dispose of items.
+                          Save a neighborhood search alert or post a "Looking For" request. Automatic neighbor notifications are not configured yet.
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
                       <button
                         type="button"
-                        onClick={() => setIsAlertModalOpen(true)}
+                        onClick={() => token ? setIsAlertModalOpen(true) : setAuthOpen(true)}
                         className="flex-1 md:flex-initial px-4 py-2 rounded-xl bg-[#1e1e22] hover:bg-[#27272a] border border-[#27272a] text-[#fafafa] text-[12px] font-semibold transition-colors text-center flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-[#a78bfa] text-base">
@@ -550,7 +660,7 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setIsRequestModalOpen(true)}
+                        onClick={() => token ? setIsRequestModalOpen(true) : setAuthOpen(true)}
                         className="flex-1 md:flex-initial px-4 py-2 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[12px] font-semibold transition-all shadow-[0_0_12px_rgba(167,139,250,0.25)] active:scale-95 text-center flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-base font-bold">campaign</span>
@@ -567,6 +677,7 @@ export default function App() {
 
       {/* Footer */}
       <Footer
+        availableItemsCount={items.length}
         onSelectHub={(hub) => {
           setNeighborhood(hub);
           setCurrentTab('explore');
@@ -601,7 +712,7 @@ export default function App() {
 
       {isMapModalOpen && (
         <MapViewModal
-          items={filteredItems}
+          items={mapItems}
           radius={radius}
           onClose={() => setIsMapModalOpen(false)}
           onSelectItem={(it) => setInspectingItem(it)}
@@ -612,18 +723,22 @@ export default function App() {
         isOpen={isAlertModalOpen}
         onClose={() => setIsAlertModalOpen(false)}
         radius={radius}
-        onSuccess={(term) =>
-          showToast(`Alert created for "${term}" in your ${radius}-mi circle!`)
-        }
+        neighborhood={currentNeighborhoodLabel}
+        onSuccess={async (term, notifyByEmail) => {
+          await api('/community/alerts', { method: 'POST', body: JSON.stringify({ term, radius, locality: neighborhood === 'all' ? 'Seattle' : currentNeighborhoodLabel, notifyByEmail }) });
+          showToast(`Alert saved for "${term}". Notification delivery is not configured yet.`);
+        }}
       />
 
       <PostRequestModal
         isOpen={isRequestModalOpen}
         onClose={() => setIsRequestModalOpen(false)}
-        onSuccess={(req) =>
-          showToast(`Broadcasted request: "${req.slice(0, 30)}..." to neighbors!`)
-        }
+        onSuccess={async (description, category) => {
+          await api('/community/requests', { method: 'POST', body: JSON.stringify({ description, category, locality: neighborhood === 'all' ? undefined : currentNeighborhoodLabel }) });
+          showToast('Request saved to your account. Neighbors are not notified automatically yet.');
+        }}
       />
+      {authOpen && <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"><form onSubmit={handleAuth} className="w-full max-w-md bg-[#121215] border border-[#27272a] rounded-3xl p-6 space-y-4"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{authMode === 'login' ? 'Welcome back' : 'Join ShareLoop'}</h2><button type="button" onClick={() => setAuthOpen(false)} aria-label="Close" className="text-[#a1a1aa]">×</button></div>{authError && <p role="alert" className="text-sm text-red-400">{authError}</p>}{authMode === 'register' && <input name="name" required minLength={2} placeholder="Your name" className="w-full bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3" />}<input name="email" type="email" required placeholder="Email" className="w-full bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3"/><input name="password" type="password" required minLength={8} placeholder="Password (8+ characters)" className="w-full bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3"/><button disabled={authSubmitting} className="w-full bg-[#a78bfa] disabled:opacity-50 text-[#09090b] font-semibold rounded-xl py-3">{authSubmitting ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button><button type="button" disabled={authSubmitting} onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }} className="w-full text-sm text-[#c4b5fd]">{authMode === 'login' ? 'New here? Create an account' : 'Already a member? Sign in'}</button></form></div>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { ItemListing } from '../types';
 interface ClaimModalProps {
   item: ItemListing | null;
   onClose: () => void;
-  onConfirmClaim: (item: ItemListing, pickupWindow: string, note: string, passCode: string) => void;
+  onConfirmClaim: (item: ItemListing, pickupWindow: string, note: string, passCode: string) => Promise<string>;
   onGoToMyClaims: () => void;
 }
 
@@ -21,16 +21,16 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({
   const [pledgeAccepted, setPledgeAccepted] = useState(true);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [generatedPassCode, setGeneratedPassCode] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!item) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pledgeAccepted) return;
-    const pass = `PIN-PASS #${Math.floor(1000 + Math.random() * 9000)}`;
-    setGeneratedPassCode(pass);
-    setIsSubmitted(true);
-    onConfirmClaim(item, pickupSlot, friendlyNote, pass);
+    setIsSubmitting(true); setSubmitError('');
+    onConfirmClaim(item, pickupSlot, friendlyNote, '').then((pass) => { setGeneratedPassCode(pass); setIsSubmitted(true); }).catch((error) => setSubmitError(error instanceof Error ? error.message : 'Unable to claim this item')).finally(() => setIsSubmitting(false));
   };
 
   return (
@@ -57,6 +57,7 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({
 
         {!isSubmitted ? (
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {submitError && <p role="alert" className="px-6 pt-3 text-sm text-red-400">{submitError}</p>}
             {/* Scrollable Form Body */}
             <div className="overflow-y-auto p-6 space-y-5 flex-1 min-h-0">
               {/* Item Mini Card */}
@@ -156,7 +157,7 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!pledgeAccepted}
+                disabled={!pledgeAccepted || isSubmitting}
                 className="px-6 py-2.5 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] disabled:opacity-40 text-[#09090b] text-[13px] font-semibold transition-all shadow-[0_0_15px_rgba(167,139,250,0.3)] active:scale-95 cursor-pointer flex items-center gap-1.5"
               >
                 <span>Confirm Rehome Claim</span>

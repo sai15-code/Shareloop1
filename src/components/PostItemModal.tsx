@@ -6,7 +6,7 @@ import { CustomSelect, Option } from './CustomSelect';
 interface PostItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddItem: (newItem: ItemListing) => void;
+  onAddItem: (newItem: ItemListing) => void | Promise<void>;
 }
 
 const CATEGORY_OPTIONS: Option<CategoryType>[] = [
@@ -77,6 +77,8 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
   const [isDragging, setIsDragging] = useState(false);
   const [photoSourceMode, setPhotoSourceMode] = useState<'upload' | 'preset' | 'url'>('upload');
   const [dimensions, setDimensions] = useState('');
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,9 +133,15 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!title.trim() || !description.trim()) return;
+    if (imageUrl.startsWith('data:')) {
+      setFormError('Device uploads need image storage, which is not configured yet. Choose a preset or use a public image URL.');
+      return;
+    }
+    setFormError('');
 
     const finalImage = imageUrl.trim() || PRESET_PHOTOS[0].url;
 
@@ -163,8 +171,15 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
       mapCoords: { x: 48, y: 46 }
     };
 
-    onAddItem(newItem);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await onAddItem(newItem);
+      onClose();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Unable to publish this listing. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -193,6 +208,7 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="overflow-y-auto p-6 space-y-5">
+          {formError && <p role="alert" className="text-sm text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">{formError}</p>}
           {/* Item Title */}
           <div>
             <label className="block text-[12px] font-semibold text-[#a1a1aa] mb-1">
@@ -201,6 +217,8 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
             <input
               type="text"
               required
+              minLength={3}
+              maxLength={120}
               placeholder="e.g. Solid Birch Wood Side Table"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -260,6 +278,8 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
             </label>
             <textarea
               required
+              minLength={10}
+              maxLength={3000}
               rows={3}
               placeholder="Tell neighbors about the condition, story, or why you're passing it on..."
               value={description}
@@ -477,10 +497,11 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] text-[#09090b] text-[13px] font-bold transition-all shadow-[0_0_15px_rgba(167,139,250,0.3)] active:scale-95 cursor-pointer flex items-center gap-1.5"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 rounded-xl bg-[#a78bfa] hover:bg-[#c4b5fd] disabled:opacity-50 text-[#09090b] text-[13px] font-bold transition-all shadow-[0_0_15px_rgba(167,139,250,0.3)] active:scale-95 cursor-pointer flex items-center gap-1.5"
             >
-              <span className="material-symbols-outlined text-base font-bold">send</span>
-              <span>Publish Free Listing</span>
+              <span className="material-symbols-outlined text-base font-bold">{isSubmitting ? 'hourglass_top' : 'send'}</span>
+              <span>{isSubmitting ? 'Publishing…' : 'Publish Free Listing'}</span>
             </button>
           </div>
         </form>
